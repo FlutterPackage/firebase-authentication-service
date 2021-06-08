@@ -1,11 +1,21 @@
 import 'package:firebase_authentication_service/firebase_authentication_service.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 const _mockFirebaseUserUid = 'id';
 const _mockFirebaseUserEmail = 'email';
+
+mixin LegacyEquality {
+  @override
+  bool operator ==(dynamic other) => false;
+
+  @override
+  int get hashCode => 0;
+}
 
 class MockFirebaseAuth extends Mock implements firebase_auth.FirebaseAuth {}
 
@@ -14,6 +24,19 @@ class MockFirebaseUser extends Mock implements firebase_auth.User {}
 class MockUserCredential extends Mock implements firebase_auth.UserCredential {}
 
 class FakeAuthCredential extends Fake implements firebase_auth.AuthCredential {}
+
+class MockGoogleSignIn extends Mock implements GoogleSignIn {}
+
+class MockGoogleSignInAccount extends Mock
+    with LegacyEquality
+    implements GoogleSignInAccount {}
+
+class MockGoogleSignInAuthentication extends Mock
+    implements GoogleSignInAuthentication {}
+
+class MockFacebookAuth extends Mock implements FacebookAuth {}
+
+class MockFacebookLoginResult extends Mock implements LoginResult {}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +48,8 @@ void main() {
   const code = 'code';
   const newPassword = 'newPassword';
   const token = 'token';
+  const accessToken = 'access-token';
+  const idToken = 'id-token';
   const user = User(
     id: _mockFirebaseUserUid,
     email: _mockFirebaseUserEmail,
@@ -35,6 +60,8 @@ void main() {
   group('FirebaseAuthenticationService', () {
     late firebase_auth.FirebaseAuth firebaseAuth;
     late FirebaseAuthenticationService authenticationService;
+    late GoogleSignIn googleSignIn;
+    late FacebookAuth facebookAuth;
 
     setUpAll(() {
       registerFallbackValue<firebase_auth.AuthCredential>(FakeAuthCredential());
@@ -42,8 +69,13 @@ void main() {
 
     setUp(() {
       firebaseAuth = MockFirebaseAuth();
-      authenticationService =
-          FirebaseAuthenticationService(firebaseAuth: firebaseAuth);
+      googleSignIn = MockGoogleSignIn();
+      facebookAuth = MockFacebookAuth();
+      authenticationService = FirebaseAuthenticationService(
+        firebaseAuth: firebaseAuth,
+        googleSignIn: googleSignIn,
+        facebookAuth: facebookAuth,
+      );
     });
 
     test('creates FirebaseAuth instance internally when not injected', () {
@@ -253,6 +285,70 @@ void main() {
         ).thenThrow(Exception());
         expect(
           authenticationService.signInWithCustomToken(token: token),
+          throwsA(isA<FirebaseFailure>()),
+        );
+      });
+    });
+
+    group('signInWithGoogle', () {
+      setUp(() {
+        final googleSignInAuthentication = MockGoogleSignInAuthentication();
+        final googleSignInAccount = MockGoogleSignInAccount();
+        when(() => googleSignInAuthentication.accessToken)
+            .thenReturn(accessToken);
+        when(() => googleSignInAuthentication.idToken).thenReturn(idToken);
+        when(() => googleSignInAccount.authentication)
+            .thenAnswer((_) async => googleSignInAuthentication);
+        when(() => googleSignIn.signIn())
+            .thenAnswer((_) async => googleSignInAccount);
+        when(() => firebaseAuth.signInWithCredential(any()))
+            .thenAnswer((_) => Future.value(MockUserCredential()));
+      });
+
+      test('calls signIn authentication, and signInWithCredential', () async {
+        await authenticationService.signInWithGoogle();
+        verify(() => googleSignIn.signIn()).called(1);
+        verify(() => firebaseAuth.signInWithCredential(any())).called(1);
+      });
+
+      test('succeeds when signIn succeeds', () {
+        expect(authenticationService.signInWithGoogle(), completes);
+      });
+
+      test('throws LogInWithGoogleFailure when exception occurs', () async {
+        when(() => firebaseAuth.signInWithCredential(any()))
+            .thenThrow(Exception());
+        expect(
+          authenticationService.signInWithGoogle(),
+          throwsA(isA<FirebaseFailure>()),
+        );
+      });
+    });
+
+    group('signInWithFacebook', () {
+      setUp(() {
+        final facebookAccessToken = MockFacebookLoginResult();
+        when(() => facebookAuth.login())
+            .thenAnswer((_) async => facebookAccessToken);
+        when(() => firebaseAuth.signInWithCredential(any()))
+            .thenAnswer((_) => Future.value(MockUserCredential()));
+      });
+
+      test('calls signIn authentication, and signInWithCredential', () async {
+        await authenticationService.signInWithFacebook();
+        verify(() => facebookAuth.login()).called(1);
+        verify(() => firebaseAuth.signInWithCredential(any())).called(1);
+      });
+
+      test('succeeds when signIn succeeds', () {
+        expect(authenticationService.signInWithFacebook(), completes);
+      });
+
+      test('throws LogInWithGoogleFailure when exception occurs', () async {
+        when(() => firebaseAuth.signInWithCredential(any()))
+            .thenThrow(Exception());
+        expect(
+          authenticationService.signInWithFacebook(),
           throwsA(isA<FirebaseFailure>()),
         );
       });

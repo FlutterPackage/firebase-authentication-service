@@ -1,15 +1,24 @@
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:firebase_authentication_service/firebase_authentication_service.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 /// Thrown error if a failure occurs.
 class FirebaseFailure implements Exception {}
 
 /// Service for firebase user authentication
 class FirebaseAuthenticationService {
-  FirebaseAuthenticationService({firebase_auth.FirebaseAuth? firebaseAuth})
-      : _firebaseAuth = firebaseAuth ?? firebase_auth.FirebaseAuth.instance;
+  FirebaseAuthenticationService({
+    firebase_auth.FirebaseAuth? firebaseAuth,
+    GoogleSignIn? googleSignIn,
+    FacebookAuth? facebookAuth,
+  })  : _firebaseAuth = firebaseAuth ?? firebase_auth.FirebaseAuth.instance,
+        _googleSignIn = googleSignIn ?? GoogleSignIn.standard(),
+        _facebookAuth = facebookAuth ?? FacebookAuth.instance;
 
   final firebase_auth.FirebaseAuth _firebaseAuth;
+  final GoogleSignIn _googleSignIn;
+  final FacebookAuth _facebookAuth;
 
   /// Stream of [User] which will return current user when the authentication state changes.
   /// Return [User.empty] if the user is not authenticated.
@@ -55,6 +64,37 @@ class FirebaseAuthenticationService {
   Future<void> signInWithCustomToken({required String token}) async {
     try {
       await _firebaseAuth.signInWithCustomToken(token);
+    } on Exception {
+      throw FirebaseFailure();
+    }
+  }
+
+  /// Sign in with Google.
+  Future<void> signInWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      final GoogleSignInAuthentication? googleAuth =
+          await googleUser?.authentication;
+      final credential = firebase_auth.GoogleAuthProvider.credential(
+        accessToken: googleAuth?.accessToken,
+        idToken: googleAuth?.idToken,
+      );
+      await _firebaseAuth.signInWithCredential(credential);
+    } on Exception {
+      throw FirebaseFailure();
+    }
+  }
+
+  /// Sign in with Facebook.
+  Future<void> signInWithFacebook() async {
+    try {
+      final LoginResult result = await _facebookAuth.login();
+      if (result.status == LoginStatus.success) {
+        final facebookAuthCredential =
+            firebase_auth.FacebookAuthProvider.credential(
+                result.accessToken as String);
+        await _firebaseAuth.signInWithCredential(facebookAuthCredential);
+      }
     } on Exception {
       throw FirebaseFailure();
     }

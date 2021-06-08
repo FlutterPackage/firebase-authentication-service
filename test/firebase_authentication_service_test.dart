@@ -357,8 +357,12 @@ void main() {
     group('signOut', () {
       test('calls signOut', () async {
         when(() => firebaseAuth.signOut()).thenAnswer((_) async => null);
+        when(() => googleSignIn.signOut()).thenAnswer((_) async => null);
+        when(() => facebookAuth.logOut()).thenAnswer((_) async => null);
         await authenticationService.signOut();
         verify(() => firebaseAuth.signOut()).called(1);
+        verify(() => googleSignIn.signOut()).called(1);
+        verify(() => facebookAuth.logOut()).called(1);
       });
 
       test('throws FirebaseFailure when signOut throws', () async {

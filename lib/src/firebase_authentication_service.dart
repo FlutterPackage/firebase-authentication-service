@@ -104,7 +104,11 @@ class FirebaseAuthenticationService {
   /// [User.empty] from the [user] Stream.
   Future<void> signOut() async {
     try {
-      await _firebaseAuth.signOut();
+      await Future.wait([
+        _firebaseAuth.signOut(),
+        _googleSignIn.signOut(),
+        _facebookAuth.logOut(),
+      ]);
     } on Exception {
       throw FirebaseFailure();
     }
